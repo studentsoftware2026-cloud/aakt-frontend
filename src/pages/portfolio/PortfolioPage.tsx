@@ -8,6 +8,7 @@ import {
   Draggable,
   type DropResult,
 } from "@hello-pangea/dnd";
+import { portfolioService } from "../../api/portfolio.service";
 
 /**
  * Portfolio Page - Displays a category-specific view (e.g., SaaS, Ecommerce)
@@ -89,13 +90,24 @@ const PortfolioPage = () => {
     { label: "Block" },
   ];
 
-  const [cards, setCards] = useState([
-    { id: "dept-1", title: "Department 1" },
-    { id: "dept-2", title: "Department 2" },
-    { id: "process", title: "Process" },
-  ]);
+  const [cards, setCards] = useState<{ id: string; title: string; order: number }[]>([]);
 
-  const onDragEnd = (result: DropResult) => {
+  // Fetch data on mount
+  useEffect(() => {
+    const loadItems = async () => {
+      try {
+        const cat = category || 'saas';
+        // For simplicity at root level, fetching departments
+        const items = await portfolioService.getItems(cat, 'department');
+        setCards(items.map(i => ({ id: i._id, title: i.name, order: i.order })).sort((a, b) => a.order - b.order));
+      } catch (err) {
+        console.error("Failed to load portfolio items", err);
+      }
+    };
+    loadItems();
+  }, [category]);
+
+  const onDragEnd = async (result: DropResult) => {
     if (!result.destination) {
       return;
     }
@@ -104,7 +116,36 @@ const PortfolioPage = () => {
     const [removed] = reorderedCards.splice(result.source.index, 1);
     reorderedCards.splice(result.destination.index, 0, removed);
 
-    setCards(reorderedCards);
+    // Update state optimistically
+    const updatedCards = reorderedCards.map((card, idx) => ({ ...card, order: idx }));
+    setCards(updatedCards);
+
+    try {
+      await portfolioService.reorderItems(updatedCards.map(c => ({ id: c.id, order: c.order })));
+    } catch (err) {
+      console.error("Failed to save reorder", err);
+    }
+  };
+
+  const handleCreateNew = async (label: string) => {
+    setIsDropdownOpen(false);
+    try {
+      const cat = category || 'saas';
+      let itemType = 'department';
+      if (label.includes('Operation')) itemType = 'operation';
+      else if (label.includes('Project')) itemType = 'project';
+      else if (label.includes('Process')) itemType = 'process';
+      else if (label.includes('Block')) itemType = 'block';
+
+      const newItem = await portfolioService.createItem(cat, {
+        itemType: itemType as any,
+        name: `New ${label}`,
+        order: cards.length
+      });
+      setCards(prev => [...prev, { id: newItem._id, title: newItem.name, order: newItem.order }]);
+    } catch (err) {
+      console.error("Failed to create item", err);
+    }
   };
 
   return (
@@ -161,6 +202,7 @@ const PortfolioPage = () => {
                   {dropdownItems.map((item, i) => (
                     <button
                       key={i}
+                      onClick={() => handleCreateNew(item.label)}
                       className="w-full flex items-center gap-3 px-6 py-3 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-left group"
                     >
                       <span className="text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400">
@@ -186,11 +228,10 @@ const PortfolioPage = () => {
             onClick={() => setActiveTab(tab)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className={`relative px-2 py-1 text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? "text-gray-900 dark:text-gray-100"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            }`}
+            className={`relative px-2 py-1 text-sm font-medium transition-colors ${activeTab === tab
+              ? "text-gray-900 dark:text-gray-100"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
           >
             {tab}
             {activeTab === tab && (
@@ -225,16 +266,14 @@ const PortfolioPage = () => {
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`transition-all ${
-                            snapshot.isDragging ? "z-50" : ""
-                          }`}
+                          className={`transition-all ${snapshot.isDragging ? "z-50" : ""
+                            }`}
                         >
                           <motion.div
-                            className={`flex flex-col items-center gap-3 w-64 group cursor-pointer p-6 rounded-[2.5rem] hover:bg-gray-100 dark:hover:bg-slate-800 transition-all font-bold ${
-                              snapshot.isDragging
-                                ? "bg-white dark:bg-slate-900 shadow-lg"
-                                : ""
-                            }`}
+                            className={`flex flex-col items-center gap-3 w-64 group cursor-pointer p-6 rounded-[2.5rem] hover:bg-gray-100 dark:hover:bg-slate-800 transition-all font-bold ${snapshot.isDragging
+                              ? "bg-white dark:bg-slate-900 shadow-lg"
+                              : ""
+                              }`}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >

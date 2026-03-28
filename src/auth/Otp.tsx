@@ -1,17 +1,51 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+// Get token from local storage
+const token = localStorage.getItem("token");
+
 const Otp = () => {
   const [otp, setOtp] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const isFormValid = otp.trim() !== "";
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
-    console.log("Verify OTP:", otp);
-    navigate("/stage");
+    if (!isFormValid || isLoading) return;
+
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("http://localhost:3000/onboarding/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ otp }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Invalid OTP";
+        try {
+          const data = await response.json();
+          if (data?.message) errorMessage = data.message;
+        } catch (err) {
+          // fallback
+        }
+        throw new Error(errorMessage);
+      }
+
+      navigate("/stage");
+    } catch (err: any) {
+      setError(err.message || "Failed to verify OTP");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -27,19 +61,23 @@ const Otp = () => {
             type="text"
             placeholder=""
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => {
+              setOtp(e.target.value);
+              if (error) setError("");
+            }}
           />
+          {error && <p className="text-red-500 text-sm mt-1 text-left">{error}</p>}
 
           <button
             type="submit"
-            disabled={!isFormValid}
+            disabled={!isFormValid || isLoading}
             className={`w-full p-2.5 mt-4 text-white border-none rounded-lg text-base font-semibold transition-all duration-300 shadow-md ${
-              isFormValid
+              isFormValid && !isLoading
                 ? "bg-blue-600 cursor-pointer hover:bg-blue-700 hover:shadow-lg"
                 : "bg-[#94A6FD] cursor-not-allowed opacity-70 shadow-none"
             }`}
           >
-            Verify
+            {isLoading ? "Verifying..." : "Verify"}
           </button>
         </form>
       </div>

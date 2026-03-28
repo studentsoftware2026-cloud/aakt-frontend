@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 const ArrowLeftIcon = () => (
   <svg
@@ -52,13 +53,43 @@ const Skills = () => {
     );
   };
 
-  const handleContinue = () => {
-    console.log("Selected Skills:", selectedSkills);
-    navigate("/step");
+  const handleContinue = async () => {
+    try {
+      const getSkillsByCategory = (category: Category) =>
+        selectedSkills
+          .map((id) => allSkills.find((s) => s.id === id))
+          .filter((s) => s && s.category === category)
+          .map((s) => s?.name)
+          .join(", ");
+
+      const payload = {
+        skills: {
+          product: getSkillsByCategory("Product"),
+          strategy: getSkillsByCategory("Strategy"),
+          team: getSkillsByCategory("Team"),
+          finance: getSkillsByCategory("Finance"),
+        },
+      };
+
+      console.log("Payload:", payload);
+
+      const token = localStorage.getItem("token");
+      await axios.post("http://localhost:3000/onboarding/skills", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      navigate("/dashboard/home");
+    } catch (error) {
+      console.error("Failed to save onboarding skills:", error);
+      // Navigate anyway to keep flow moving, but log error
+      navigate("/dashboard/home");
+    }
   };
 
   const handleSkip = () => {
-    navigate("/step");
+    navigate("/dashboard/home");
   };
 
   // Group skills by category

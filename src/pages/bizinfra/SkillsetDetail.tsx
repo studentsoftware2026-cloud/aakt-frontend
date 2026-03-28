@@ -3,6 +3,7 @@ import Breadcrumbs from "../../components/Breadcrumbs";
 import EditItemModal from "../../components/EditItemModal";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { bizInfraService } from "../../api/bizInfra.service";
 import {
   DragDropContext,
   Droppable,
@@ -153,11 +154,10 @@ const SearchModal = ({
                     <button
                       key={category}
                       onClick={() => setActiveCategory(category)}
-                      className={`text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all font-['Inter'] ${
-                        activeCategory === category
-                          ? "bg-blue-600/10 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400"
-                          : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-gray-200"
-                      }`}
+                      className={`text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all font-['Inter'] ${activeCategory === category
+                        ? "bg-blue-600/10 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400"
+                        : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-gray-200"
+                        }`}
                     >
                       {category}
                     </button>
@@ -285,17 +285,26 @@ const SkillsetDetail = () => {
   const plusButtonRef = useRef<HTMLDivElement | null>(null);
   const plusMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const [categories, setCategories] = useState([
-    { id: "project", label: "Project", image: null as string | null },
-    { id: "process", label: "Process", image: null as string | null },
-    { id: "block", label: "Block", image: null as string | null },
-  ]);
+  const [categories, setCategories] = useState<{ id: string; label: string; image: string | null }[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<{
     id: string;
     label: string;
     image?: string | null;
   } | null>(null);
+
+  // Fetch bizinfra items on mount
+  useEffect(() => {
+    const loadItems = async () => {
+      try {
+        const items = await bizInfraService.getItems('skillset');
+        setCategories(items.map(i => ({ id: i._id, label: i.name, image: i.imageUrl || null })));
+      } catch (err) {
+        console.error("Failed to load skillsets", err);
+      }
+    };
+    loadItems();
+  }, []);
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -329,26 +338,43 @@ const SkillsetDetail = () => {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isPlusOpen]);
 
-  const handleSaveEdit = (
+  const handleSaveEdit = async (
     id: string,
     newName: string,
     newImage: string | null,
   ) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.id === id ? { ...cat, label: newName, image: newImage } : cat,
-      ),
-    );
+    try {
+      const updated = await bizInfraService.updateItem(id, { name: newName, imageUrl: newImage || undefined });
+      setCategories((prev) =>
+        prev.map((cat) =>
+          cat.id === id ? { ...cat, label: updated.name, image: updated.imageUrl || null } : cat,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update item", err);
+    }
   };
 
-  const handleModeSelect = (mode: "blank" | "template") => {
-    if (selectedCategory) {
-      // Example: Navigate to a creation page with mode and category info
-      console.log(
-        `Creating new ${selectedCategory.label} in ${mode} mode for skill ${id}`,
-      );
-      // You would typically use a navigation hook here, e.g., navigate(...)
-      // For now, just close the modal
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this item?")) return;
+    try {
+      await bizInfraService.deleteItem(id);
+      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+    } catch (err) {
+      console.error("Failed to delete item", err);
+    }
+  };
+
+  const handleModeSelect = async (mode: "blank" | "template") => {
+    try {
+      // In a real flow, you might show a different modal. For now we just create a generic one
+      const newItem = await bizInfraService.createItem('skillset', {
+        name: selectedCategory?.label || `New ${mode} item`,
+        description: `Created via ${mode} mode`
+      });
+      setCategories(prev => [...prev, { id: newItem._id, label: newItem.name, image: newItem.imageUrl || null }]);
+    } catch (err) {
+      console.error("Failed to create item", err);
     }
     setIsCreationModalOpen(false);
     setSelectedCategory(null);
@@ -435,9 +461,8 @@ const SkillsetDetail = () => {
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
-                        className={`transition-all ${
-                          snapshot.isDragging ? "z-50" : ""
-                        }`}
+                        className={`transition-all ${snapshot.isDragging ? "z-50" : ""
+                          }`}
                       >
                         <Link
                           to={`/dashboard/bizinfra/skillset/${id}/${cat.id}`}
@@ -460,7 +485,7 @@ const SkillsetDetail = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log("Delete", cat.id);
+                                handleDelete(cat.id);
                               }}
                               className="p-2 rounded-xl hover:bg-white dark:hover:bg-slate-800 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 transition-all scale-90 hover:scale-100"
                             >
@@ -468,11 +493,10 @@ const SkillsetDetail = () => {
                             </button>
                           </div>
                           <motion.div
-                            className={`flex flex-col items-center gap-3 w-full cursor-pointer p-6 rounded-[2.5rem] hover:bg-gray-100 dark:hover:bg-slate-900/50 transition-all ${
-                              snapshot.isDragging
-                                ? "bg-white dark:bg-slate-800 shadow-lg"
-                                : ""
-                            }`}
+                            className={`flex flex-col items-center gap-3 w-full cursor-pointer p-6 rounded-[2.5rem] hover:bg-gray-100 dark:hover:bg-slate-900/50 transition-all ${snapshot.isDragging
+                              ? "bg-white dark:bg-slate-800 shadow-lg"
+                              : ""
+                              }`}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >

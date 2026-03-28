@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { taskService, type TaskItem } from "../api/task.service";
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -30,6 +31,8 @@ const CloseIcon = () => (
 );
 
 const TaskModal = ({ isOpen, onClose, task }: TaskModalProps) => {
+  const [subtasks, setSubtasks] = useState<TaskItem[]>([]);
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -37,6 +40,14 @@ const TaskModal = ({ isOpen, onClose, task }: TaskModalProps) => {
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen && task?.id) {
+      taskService.getTasks({ parentId: task.id })
+        .then(setSubtasks)
+        .catch(err => console.error("Failed to fetch subtasks", err));
+    }
+  }, [isOpen, task?.id]);
 
   if (!isOpen) return null;
 
@@ -94,14 +105,16 @@ const TaskModal = ({ isOpen, onClose, task }: TaskModalProps) => {
                 Subtasks
               </h3>
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3">
+                {subtasks.length > 0 ? subtasks.map((st) => (
+                  <div key={st._id} className="flex items-center gap-3">
                     <div className="w-5 h-5 rounded border border-gray-300 dark:border-slate-700 flex items-center justify-center cursor-pointer hover:border-blue-500 transition-colors"></div>
                     <span className="text-gray-700 dark:text-gray-300 text-sm">
-                      Subtask item {i}
+                      {st.title}
                     </span>
                   </div>
-                ))}
+                )) : (
+                  <span className="text-gray-500 text-sm">No subtasks yet</span>
+                )}
               </div>
             </div>
           </div>

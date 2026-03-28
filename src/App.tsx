@@ -46,8 +46,8 @@ const App = () => {
     <MemoryRouter>
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<Register />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/" element={<Login />} />
         <Route path="/register1" element={<Register1 />} />
         <Route path="/register2" element={<Register2 />} />
         <Route path="/otp" element={<Otp />} />
